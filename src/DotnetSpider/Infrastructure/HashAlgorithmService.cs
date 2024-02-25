@@ -1,32 +1,23 @@
+using System;
 using System.Security.Cryptography;
 using System.Threading;
 
 namespace DotnetSpider.Infrastructure
 {
-	public abstract class HashAlgorithmService : IHashAlgorithmService
-	{
-		private SpinLock _spin;
+    public abstract class HashAlgorithmService : IHashAlgorithmService
+    {
+        private static readonly ThreadLocal<HashAlgorithm> _threadLocalHashAlgorithm = new ThreadLocal<HashAlgorithm>(() => null);
 
-		protected abstract HashAlgorithm GetHashAlgorithm();
+        protected abstract HashAlgorithm CreateHashAlgorithm();
 
-		public byte[] ComputeHash(byte[] bytes)
-		{
-			var locker = false;
-			try
-			{
-				//申请获取锁
-				_spin.Enter(ref locker);
-				return GetHashAlgorithm().ComputeHash(bytes);
-			}
-			finally
-			{
-				//工作完毕，或者发生异常时，检测一下当前线程是否占有锁，如果咱有了锁释放它
-				//以避免出现死锁的情况
-				if (locker)
-				{
-					_spin.Exit();
-				}
-			}
-		}
-	}
+        public byte[] ComputeHash(byte[] bytes)
+        {
+            var hashAlgorithm = _threadLocalHashAlgorithm.Value ?? (_threadLocalHashAlgorithm.Value = CreateHashAlgorithm());
+
+            lock (hashAlgorithm) // Assuming hashAlgorithm is not inherently thread-safe
+            {
+                return hashAlgorithm.ComputeHash(bytes);
+            }
+        }
+    }
 }
